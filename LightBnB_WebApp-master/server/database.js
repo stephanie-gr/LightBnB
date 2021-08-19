@@ -52,15 +52,16 @@ exports.getUserWithId = getUserWithId;
  * @return {Promise<{}>} A promise to the user.
  */
 const addUser =  function(user) {
-  return pool.query('INSERT INTO users (name, email, password) VALUES ("$1", "$2", "$3") RETURNING* ;', [user.name, user.email, user.password])
-  .then((result) => {
-    console.log(result.rows);
-    return (result.rows);
-  }) 
-  .catch((err) => {
-    return null;
-  });
+  const queryParams = [user.name, user.email, user.password];
+  
+  return pool
+  .query('INSERT INTO users(name, email, password) VALUES ($1, $2, $3) RETURNING *;', queryParams)
+  .then(res => {
+    console.log(res.rows);
+    return (res.rows);
+  })
 }
+  
 exports.addUser = addUser;
 
 /// Reservations
@@ -87,13 +88,35 @@ exports.getAllReservations = getAllReservations;
  * @param {*} limit The number of results to return.
  * @return {Promise<[{}]>}  A promise to the properties.
  */
- const getAllProperties = (options, limit = 10) => {
-  return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
-    .then(result => result.rows)
-    .catch((err) => {
-      console.log(err.message);
-    });
+  const getAllProperties = function (options, limit = 10) {
+    const queryParams = [];
+    
+    let queryString = `
+    SELECT properties.*, avg(property_reviews.rating) as average_rating
+    FROM properties
+    JOIN property_reviews ON properties.id = property_id
+    `;
+  
+    if (options.city) {
+      queryParams.push(`%${options.city}%`);
+      queryString += `WHERE city LIKE $${queryParams.length} `;
+    }
+
+    if (options.owner_id) {
+      queryParams.push(`%${options.owner_id}%`);
+      queryString += `AND owner_id LIKE $${queryParams.length}`;
+    }
+  
+    queryParams.push(limit);
+    queryString += `
+    GROUP BY properties.id
+    ORDER BY cost_per_night
+    LIMIT $${queryParams.length};
+    `;
+  
+    console.log(queryString, queryParams);
+  
+    return pool.query(queryString, queryParams).then(res => {return res.rows});
 };
 exports.getAllProperties = getAllProperties;
 
